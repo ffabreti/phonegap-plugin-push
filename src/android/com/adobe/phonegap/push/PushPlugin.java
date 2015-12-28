@@ -4,9 +4,11 @@ import android.app.NotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.AsyncTask;
 import android.util.Log;
 
 import com.google.android.gms.gcm.GcmPubSub;
+import com.google.android.gms.gcm.GoogleCloudMessaging;
 import com.google.android.gms.iid.InstanceID;
 
 import org.apache.cordova.CallbackContext;
@@ -22,6 +24,8 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.concurrent.atomic.AtomicInteger;
+
 
 public class PushPlugin extends CordovaPlugin implements PushConstants {
 
@@ -30,7 +34,13 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
     private static CallbackContext pushContext;
     private static CordovaWebView gWebView;
     private static Bundle gCachedExtras = null;
-    private static boolean gForeground = false;
+    private static boolean gForeground = false;   //!
+
+    private static String gECB;                  // not used anymore?
+    private static String gSenderID;
+
+
+    private AtomicInteger msgId = new AtomicInteger();
 
     /**
      * Gets the application context from cordova's main activity.
@@ -130,6 +140,85 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
                     }
                 }
             });
+        } else if (SEND.equals(action)) {
+            Log.v(LOG_TAG, "execute: data=" + data.toString());
+            try {
+                JSONObject jo = data.getJSONObject(0);
+
+                //gWebView = this.webView;
+                Log.v(LOG_TAG, "execute: jo=" + jo.toString());
+
+                gSenderID = (String) jo.get("senderID");
+
+                Log.v(LOG_TAG, "execute: senderID=" + gSenderID);
+                final Bundle data2send = new Bundle();
+                data2send.putString("my_message", "Hello World");    //TODO: send real data
+                final String id = Integer.toString(msgId.incrementAndGet());
+                final GoogleCloudMessaging gcm = GoogleCloudMessaging.getInstance(getApplicationContext());
+
+                new AsyncTask<Void, Void, String>() {
+
+                    @Override
+                    protected String doInBackground(Void... params) {
+                        try {
+                                Log.d(LOG_TAG, "sending...");
+                                gcm.send(gSenderID + "@gcm.googleapis.com", id, data2send);
+                                Log.d(LOG_TAG, "sent.");
+                            } catch (IOException e) {
+                                // TODO Auto-generated catch block
+                                e.printStackTrace();
+                            }
+                        return null;
+                    }
+
+                    /*
+                    @Override
+                    protected void onPostExecute(String result) {
+                        if (result != null) {
+                            Toast.makeText(activity,
+                                "send message failed: " + result,
+                                Toast.LENGTH_LONG).show();
+                        }
+                    }
+                    */
+
+                    /*   TODO:
+                        https://developers.google.com/cloud-messaging/upstream
+                        Handle upstream message callbacks
+
+                            With GcmListenerService, you can implement the callbacks onMessageSent and onSendError
+                            to check the status of upstream messages. Keep in mind that GCM batches responses from
+                            onMessageSent, so the acknowledgement may not be immediate for each successfully sent message.
+
+                            In cases where the device is offline or the GCM service is unavailable to forward
+                            upstream messages to your server, Android client app instances can accumulate a
+                            maximum of 20 pending messages.
+
+                            If such messages expire before GCM can successfully send them, onSendError returns
+                            GoogleCloudMessaing#ERROR_SERVICE_NOT_AVAILABLE. If the client attempts to send
+                            more messages after the 20-message limit is reached, it returns
+                            GoogleCloudMessaing#TooManyMessages.
+
+                     */
+
+                }.execute(null, null, null);
+
+                callbackContext.success();
+
+           } catch (JSONException e) {
+                Log.e(LOG_TAG, "execute: Got JSON Exception " + e.getMessage());
+                callbackContext.error(e.getMessage());
+           } catch (UnknownError e) {
+                Log.e(LOG_TAG, "execute: Got UnKnown Exception " + e.getMessage());
+                callbackContext.error(e.getMessage());
+           }
+
+           if (gCachedExtras != null) {
+                Log.v(LOG_TAG, "sending cached extras");
+                sendExtras(gCachedExtras);
+                gCachedExtras = null;
+           }
+
         } else if (UNREGISTER.equals(action)) {
             cordova.getThreadPool().execute(new Runnable() {
                 public void run() {
@@ -188,7 +277,7 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
         return true;
     }
 
-    public static void sendEvent(JSONObject _json) {
+    public static void sendEvent(JSONObject _json) {    // old sendJavascript ?
         PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, _json);
         pluginResult.setKeepCallback(true);
         if (pushContext != null) {

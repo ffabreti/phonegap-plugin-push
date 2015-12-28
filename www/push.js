@@ -63,6 +63,32 @@ var PushNotification = function(options) {
     }, 10);
 };
 
+
+/**
+ * Send Upstream Message
+ */
+PushNotification.prototype.send = function(successCallback, errorCallback, senderId, payload){
+    if (errorCallback == null) { errorCallback = function() {}}
+
+    if (typeof errorCallback != "function")  {
+        console.log("PushNotification.send failure: failure parameter not a function");
+        return
+    }
+
+    if (typeof successCallback != "function") {
+        console.log("PushNotification.send failure: success callback parameter must be a function");
+        return
+    }
+
+    if (! (senderId && senderId.length <= 0) ) {
+        console.log("PushNotification.send failure: senderId not present");
+        return
+    }
+
+	cordova.exec(successCallback, errorCallback, "PushPlugin", "send", [{'senderID':senderId},payload]);
+}
+
+
 /**
  * Unregister from push notifications
  */
@@ -87,7 +113,7 @@ PushNotification.prototype.unregister = function(successCallback, errorCallback,
                 'registration': [],
                 'notification': [],
                 'error': []
-            };            
+            };
         }
         successCallback();
     };
